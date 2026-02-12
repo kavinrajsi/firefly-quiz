@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}
+
+@layer components {
+  .answer-btn {
+    @apply flex items-center justify-center p-6 rounded-lg text-white font-bold text-lg
+           cursor-pointer select-none
+           transition-all duration-200 hover:scale-[1.02] hover:brightness-110
+           active:scale-90 active:brightness-90 active:shadow-[inset_0_4px_8px_rgba(0,0,0,0.3)]
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:active:scale-100;
+  }
+}
+
+@layer utilities {
+  .animate-in {
+    animation: slideUp 0.3s ease-out;
+  }
+}
