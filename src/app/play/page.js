@@ -35,10 +35,11 @@ export default function JoinPage() {
         return;
       }
 
-      // Add participant
+      // Add participant (enforce max 20 chars)
+      const safeName = nickname.slice(0, 20);
       const { data: participant, error: joinError } = await supabase
         .from('participants')
-        .insert({ session_id: session.id, nickname })
+        .insert({ session_id: session.id, nickname: safeName })
         .select()
         .single();
 

@@ -14,8 +14,8 @@ export default function HostControls({
   if (status === 'lobby') {
     return (
       <div className="flex gap-3">
-        <Button onClick={onStart} size="lg">
-          Start Quiz
+        <Button onClick={onStart} size="lg" disabled={totalQuestions === 0}>
+          {totalQuestions === 0 ? 'Add questions first' : 'Start Quiz'}
         </Button>
       </div>
     );

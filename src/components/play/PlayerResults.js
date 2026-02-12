@@ -1,6 +1,6 @@
 'use client';
 
-export default function PlayerResults({ isCorrect, pointsEarned, streak }) {
+export default function PlayerResults({ isCorrect, pointsEarned }) {
   return (
     <div className={`
       flex flex-col items-center justify-center py-12 rounded-xl

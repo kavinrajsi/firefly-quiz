@@ -20,6 +20,7 @@ export default function ResultsPage() {
   const [participants, setParticipants] = useState([]);
   const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedQuestion, setSelectedQuestion] = useState(null);
 
   useEffect(() => {
@@ -43,6 +44,10 @@ export default function ResultsPage() {
         .select('*')
         .eq('session_id', sessionId),
     ]);
+
+    if (sessRes.error || partRes.error || ansRes.error) {
+      setError('Failed to load some results data.');
+    }
 
     if (sessRes.data) {
       setSession(sessRes.data);
@@ -102,6 +107,11 @@ export default function ResultsPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -193,9 +203,9 @@ export default function ResultsPage() {
                             <span className="font-medium">{p?.nickname}</span>
                             <div className="flex items-center gap-3">
                               <span className={a.is_correct ? 'text-kahoot-green' : 'text-kahoot-red'}>
-                                {q.options[a.selected_option]}
+                                {q.options?.[a.selected_option] ?? `Option ${a.selected_option + 1}`}
                               </span>
-                              <span className="text-gray-400">{a.time_taken.toFixed(1)}s</span>
+                              <span className="text-gray-400">{(a.time_taken ?? 0).toFixed(1)}s</span>
                               <span className="font-bold text-kahoot-purple w-16 text-right">
                                 +{a.points_earned}
                               </span>

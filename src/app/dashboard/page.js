@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [quizzes, setQuizzes] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showNewQuiz, setShowNewQuiz] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -25,6 +26,7 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     setLoading(true);
+    setError('');
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push('/auth/login'); return; }
 
@@ -32,6 +34,10 @@ export default function DashboardPage() {
       supabase.from('quizzes').select('*, questions(count)').eq('user_id', user.id).order('updated_at', { ascending: false }),
       supabase.from('quiz_sessions').select('*, quizzes(title), participants(count)').eq('host_id', user.id).order('created_at', { ascending: false }).limit(10),
     ]);
+
+    if (quizRes.error || sessionRes.error) {
+      setError('Failed to load data. Please refresh the page.');
+    }
 
     setQuizzes(quizRes.data || []);
     setSessions(sessionRes.data || []);
@@ -47,56 +53,81 @@ export default function DashboardPage() {
       .select()
       .single();
 
-    if (!error && data) {
-      setShowNewQuiz(false);
-      setNewTitle('');
-      setNewDesc('');
-      router.push(`/quiz/${data.id}/edit`);
+    if (error) {
+      setError('Failed to create quiz. Please try again.');
+      return;
     }
+
+    setShowNewQuiz(false);
+    setNewTitle('');
+    setNewDesc('');
+    router.push(`/quiz/${data.id}/edit`);
   };
 
   const duplicateQuiz = async (quiz) => {
     const { data: { user } } = await supabase.auth.getUser();
-    const { data: newQuiz } = await supabase
+    const { data: newQuiz, error: quizError } = await supabase
       .from('quizzes')
       .insert({ title: `${quiz.title} (copy)`, description: quiz.description, user_id: user.id })
       .select()
       .single();
 
-    if (newQuiz) {
-      const { data: questions } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('quiz_id', quiz.id)
-        .order('sort_order');
-
-      if (questions?.length) {
-        await supabase.from('questions').insert(
-          questions.map(({ id, quiz_id, created_at, ...q }) => ({ ...q, quiz_id: newQuiz.id }))
-        );
-      }
-      loadData();
+    if (quizError || !newQuiz) {
+      setError('Failed to duplicate quiz.');
+      return;
     }
+
+    const { data: questions } = await supabase
+      .from('questions')
+      .select('*')
+      .eq('quiz_id', quiz.id)
+      .order('sort_order');
+
+    if (questions?.length) {
+      const { error: insertError } = await supabase.from('questions').insert(
+        questions.map(({ id, quiz_id, created_at, ...q }) => ({ ...q, quiz_id: newQuiz.id }))
+      );
+      if (insertError) {
+        setError('Quiz duplicated but some questions failed to copy.');
+      }
+    }
+    loadData();
   };
 
   const deleteQuiz = async (quizId) => {
     if (!confirm('Delete this quiz and all its questions?')) return;
-    await supabase.from('quizzes').delete().eq('id', quizId);
+    const { error } = await supabase.from('quizzes').delete().eq('id', quizId);
+    if (error) {
+      setError('Failed to delete quiz.');
+      return;
+    }
     setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
   };
 
   const startSession = async (quizId) => {
     const { data: { user } } = await supabase.auth.getUser();
-    const roomCode = generateRoomCode();
-    const { data, error } = await supabase
-      .from('quiz_sessions')
-      .insert({ quiz_id: quizId, host_id: user.id, room_code: roomCode })
-      .select()
-      .single();
 
-    if (!error && data) {
-      router.push(`/host/${data.id}`);
+    // Retry up to 3 times for room code collision
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const roomCode = generateRoomCode();
+      const { data, error } = await supabase
+        .from('quiz_sessions')
+        .insert({ quiz_id: quizId, host_id: user.id, room_code: roomCode })
+        .select()
+        .single();
+
+      if (!error && data) {
+        router.push(`/host/${data.id}`);
+        return;
+      }
+
+      // If not a unique constraint violation, don't retry
+      if (error && !error.message?.includes('unique')) {
+        setError('Failed to start session. Please try again.');
+        return;
+      }
     }
+    setError('Failed to generate a unique room code. Please try again.');
   };
 
   if (loading) {
@@ -109,6 +140,13 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2">×</button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">My Quizzes</h1>
         <Button onClick={() => setShowNewQuiz(true)}>+ New Quiz</Button>

@@ -6,6 +6,7 @@ import Button from '@/components/ui/Button';
 
 export default function MediaUpload({ mediaUrl, onUpload }) {
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
   const fileRef = useRef(null);
   const supabase = createClient();
 
@@ -14,15 +15,16 @@ export default function MediaUpload({ mediaUrl, onUpload }) {
     if (!file) return;
 
     setUploading(true);
+    setError('');
     try {
       const ext = file.name.split('.').pop();
       const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-      const { error } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('quiz-media')
         .upload(path, file);
 
-      if (error) throw error;
+      if (uploadError) throw uploadError;
 
       const { data } = supabase.storage
         .from('quiz-media')
@@ -30,7 +32,7 @@ export default function MediaUpload({ mediaUrl, onUpload }) {
 
       onUpload(data.publicUrl);
     } catch (err) {
-      console.error('Upload failed:', err);
+      setError('Upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -72,6 +74,7 @@ export default function MediaUpload({ mediaUrl, onUpload }) {
           >
             Upload Image/Video
           </Button>
+          {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
         </div>
       )}
     </div>

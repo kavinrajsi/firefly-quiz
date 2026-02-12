@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Spinner from '@/components/ui/Spinner';
@@ -25,30 +25,34 @@ export default function HostSessionPage() {
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [questionAnswers, setQuestionAnswers] = useState([]);
   const [channel, setChannel] = useState(null);
+  const [connectionError, setConnectionError] = useState(false);
+  const nextQuestionIndexRef = useRef(0);
 
   // Load session data
   useEffect(() => {
     const load = async () => {
-      const { data: sess } = await supabase
+      const { data: sess, error: sessError } = await supabase
         .from('quiz_sessions')
         .select('*, quizzes(title)')
         .eq('id', sessionId)
         .single();
 
-      if (!sess) { router.push('/dashboard'); return; }
+      if (sessError || !sess) { router.push('/dashboard'); return; }
       setSession(sess);
 
-      const { data: qs } = await supabase
+      const { data: qs, error: qError } = await supabase
         .from('questions')
         .select('*')
         .eq('quiz_id', sess.quiz_id)
         .order('sort_order');
+      if (qError) setConnectionError(true);
       setQuestions(qs || []);
 
-      const { data: parts } = await supabase
+      const { data: parts, error: partError } = await supabase
         .from('participants')
         .select('*')
         .eq('session_id', sessionId);
+      if (partError) setConnectionError(true);
       setParticipants(parts || []);
 
       setLoading(false);
@@ -73,7 +77,10 @@ export default function HostSessionPage() {
           });
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') setConnectionError(true);
+        if (status === 'SUBSCRIBED') setConnectionError(false);
+      });
 
     // Subscribe to answers
     const ansChannel = supabase
@@ -94,13 +101,17 @@ export default function HostSessionPage() {
           );
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') setConnectionError(true);
+      });
 
     // Broadcast channel for game state
     const bc = supabase.channel(`game-${sessionId}`, {
       config: { broadcast: { self: false } },
     });
-    bc.subscribe();
+    bc.subscribe((status) => {
+      if (status === 'CHANNEL_ERROR') setConnectionError(true);
+    });
     setChannel(bc);
 
     return () => {
@@ -118,6 +129,9 @@ export default function HostSessionPage() {
   );
 
   const startQuiz = async () => {
+    if (questions.length === 0) return;
+    if (participants.length === 0 && !confirm('No players have joined yet. Start anyway?')) return;
+    nextQuestionIndexRef.current = 0;
     setPhase('countdown');
     await supabase
       .from('quiz_sessions')
@@ -148,7 +162,7 @@ export default function HostSessionPage() {
   );
 
   const onCountdownComplete = useCallback(() => {
-    showQuestion(0);
+    showQuestion(nextQuestionIndexRef.current);
   }, [showQuestion]);
 
   const showResults = () => {
@@ -158,10 +172,9 @@ export default function HostSessionPage() {
 
   const nextQuestion = () => {
     const nextIdx = currentIndex + 1;
+    nextQuestionIndexRef.current = nextIdx;
     setPhase('countdown');
     broadcastState('countdown', { questionIndex: nextIdx });
-    // After countdown, showQuestion will be called
-    setTimeout(() => showQuestion(nextIdx), 3000);
   };
 
   const endQuiz = async () => {
@@ -185,6 +198,11 @@ export default function HostSessionPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
+      {connectionError && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600 text-center">
+          Connection lost. Live updates may be delayed. Try refreshing the page.
+        </div>
+      )}
       {/* Countdown overlay */}
       {phase === 'countdown' && <Countdown from={3} onComplete={onCountdownComplete} />}
 

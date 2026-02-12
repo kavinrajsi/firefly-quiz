@@ -19,6 +19,7 @@ export default function EditQuizPage() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [editingIndex, setEditingIndex] = useState(null); // null = none, -1 = new
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -106,12 +107,14 @@ export default function EditQuizPage() {
       sort_order: startOrder + i,
     }));
 
-    const { data, error } = await supabase
+    const { data, error: insertError } = await supabase
       .from('questions')
       .insert(rows)
       .select();
 
-    if (!error && data) {
+    if (insertError) {
+      setError('Failed to import some questions. Please try again.');
+    } else if (data) {
       setQuestions([...questions, ...data]);
     }
     setShowBulkImport(false);
@@ -124,16 +127,21 @@ export default function EditQuizPage() {
 
     const next = [...questions];
     [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-
-    // Update sort_order
     next.forEach((q, i) => (q.sort_order = i));
+
+    // Optimistic update
     setQuestions(next);
 
-    await Promise.all(
+    const results = await Promise.all(
       next.map((q, i) =>
         supabase.from('questions').update({ sort_order: i }).eq('id', q.id)
       )
     );
+
+    if (results.some((r) => r.error)) {
+      setError('Failed to reorder. Refreshing...');
+      loadQuiz();
+    }
   };
 
   if (loading) {
@@ -155,6 +163,12 @@ export default function EditQuizPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600 flex items-center justify-between">
+          <span>{error}</span>
+          <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2">×</button>
+        </div>
+      )}
       {/* Quiz details */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
         <div className="flex items-start justify-between gap-4">

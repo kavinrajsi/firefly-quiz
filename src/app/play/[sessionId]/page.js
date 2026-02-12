@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Spinner from '@/components/ui/Spinner';
@@ -25,7 +25,9 @@ export default function PlayerGamePage() {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [answerResult, setAnswerResult] = useState(null);
   const [totalScore, setTotalScore] = useState(0);
+  const scoreRef = useRef(0);
   const [participants, setParticipants] = useState([]);
+  const [connectionError, setConnectionError] = useState(false);
 
   // Load participant from sessionStorage
   useEffect(() => {
@@ -77,7 +79,10 @@ export default function PlayerGamePage() {
             break;
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') setConnectionError(true);
+        if (status === 'SUBSCRIBED') setConnectionError(false);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -106,11 +111,12 @@ export default function PlayerGamePage() {
     setTimeout(() => setPhase('answered'), 800);
 
     if (isCorrect) {
-      setTotalScore((prev) => prev + points);
+      scoreRef.current += points;
+      setTotalScore(scoreRef.current);
     }
 
     // Submit answer to database
-    await supabase.from('answers').insert({
+    const { error: answerError } = await supabase.from('answers').insert({
       session_id: sessionId,
       participant_id: participant.id,
       question_id: currentQuestion.id,
@@ -120,12 +126,20 @@ export default function PlayerGamePage() {
       points_earned: points,
     });
 
-    // Update participant score
+    if (answerError) {
+      console.error('Failed to submit answer:', answerError);
+    }
+
+    // Update participant score using ref for accurate value
     if (isCorrect) {
-      await supabase
+      const { error: scoreError } = await supabase
         .from('participants')
-        .update({ score: totalScore + points })
+        .update({ score: scoreRef.current })
         .eq('id', participant.id);
+
+      if (scoreError) {
+        console.error('Failed to update score:', scoreError);
+      }
     }
   };
 
@@ -143,6 +157,11 @@ export default function PlayerGamePage() {
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 min-h-[calc(100vh-4rem)]">
+      {connectionError && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600 text-center">
+          Connection lost. Try refreshing the page.
+        </div>
+      )}
       {/* Score bar */}
       <div className="flex items-center justify-between mb-4">
         <span className="font-semibold text-gray-700">{participant?.nickname}</span>

@@ -6,6 +6,8 @@
  */
 export function calculateScore(timeTaken, timeLimit, isCorrect) {
   if (!isCorrect) return 0;
-  const speedFactor = 1 - (timeTaken / timeLimit) * 0.5;
+  // Clamp timeTaken to valid range
+  const clamped = Math.max(0, Math.min(timeTaken, timeLimit));
+  const speedFactor = 1 - (clamped / timeLimit) * 0.5;
   return Math.max(500, Math.round(1000 * speedFactor));
 }
