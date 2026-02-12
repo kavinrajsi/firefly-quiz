@@ -1,18 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export default function Countdown({ from = 3, onComplete }) {
   const [count, setCount] = useState(from);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (count <= 0) {
-      onComplete?.();
+      onCompleteRef.current?.();
       return;
     }
     const timer = setTimeout(() => setCount((c) => c - 1), 1000);
     return () => clearTimeout(timer);
-  }, [count, onComplete]);
+  }, [count]);
 
   if (count <= 0) return null;
 

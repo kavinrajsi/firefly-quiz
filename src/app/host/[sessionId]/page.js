@@ -27,6 +27,14 @@ export default function HostSessionPage() {
   const autoAdvanceRef = useRef(null);
   const currentIndexRef = useRef(-1);
   const questionsRef = useRef([]);
+  const phaseRef = useRef('lobby');
+  const endingRef = useRef(false);
+  // Snapshot participant count when a question starts, so late joins don't affect the all-answered check
+  const activePlayerCountRef = useRef(0);
+
+  // Keep refs in sync
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // Load session data
   useEffect(() => {
@@ -116,9 +124,6 @@ export default function HostSessionPage() {
     };
   }, [session]);
 
-  // Keep refs in sync
-  useEffect(() => { questionsRef.current = questions; }, [questions]);
-
   // Cleanup auto-advance timer on unmount
   useEffect(() => {
     return () => {
@@ -126,15 +131,15 @@ export default function HostSessionPage() {
     };
   }, []);
 
-  // Skip timer and advance immediately when all players have answered
+  // Fix #2: Skip timer when all players (at question start) have answered
   useEffect(() => {
-    if (phase !== 'active' || participants.length === 0) return;
-    if (answerCount >= participants.length) {
+    if (phaseRef.current !== 'active' || activePlayerCountRef.current === 0) return;
+    if (answerCount >= activePlayerCountRef.current) {
       // Cancel the pending timer
       if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
       // Broadcast results to players
       broadcastState('show_results', { questionIndex: currentIndexRef.current });
-      // Short pause then advance to next question or end
+      // Short pause then advance
       autoAdvanceRef.current = setTimeout(() => {
         const nextIdx = currentIndexRef.current + 1;
         if (nextIdx < questionsRef.current.length) {
@@ -146,7 +151,7 @@ export default function HostSessionPage() {
         }
       }, 3000);
     }
-  }, [answerCount, participants.length, phase]);
+  }, [answerCount]);
 
   const broadcastState = useCallback(
     (type, data = {}) => {
@@ -172,6 +177,8 @@ export default function HostSessionPage() {
       setCurrentIndex(index);
       currentIndexRef.current = index;
       setAnswerCount(0);
+      // Fix #2: snapshot participant count at question start
+      activePlayerCountRef.current = participants.length;
       setPhase('active');
 
       const now = new Date().toISOString();
@@ -195,25 +202,27 @@ export default function HostSessionPage() {
         // After 5s pause for players to see results, advance to next or end
         autoAdvanceRef.current = setTimeout(() => {
           const nextIdx = index + 1;
-          if (nextIdx < questions.length) {
+          if (nextIdx < questionsRef.current.length) {
             nextQuestionIndexRef.current = nextIdx;
             setPhase('countdown');
             broadcastState('countdown', { questionIndex: nextIdx });
           } else {
-            // All questions done — end quiz
             endQuizFn();
           }
         }, 5000);
       }, timeLimit * 1000);
     },
-    [broadcastState, questions, sessionId, supabase]
+    [broadcastState, questions, participants.length, sessionId, supabase]
   );
 
   const onCountdownComplete = useCallback(() => {
     showQuestion(nextQuestionIndexRef.current);
   }, [showQuestion]);
 
+  // Fix #3: Guard against double calls
   const endQuizFn = async () => {
+    if (endingRef.current) return;
+    endingRef.current = true;
     if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
     setPhase('finished');
     await supabase
@@ -221,6 +230,13 @@ export default function HostSessionPage() {
       .update({ status: 'finished', ended_at: new Date().toISOString() })
       .eq('id', sessionId);
     broadcastState('game_end');
+  };
+
+  // Fix #6: End Quiz with confirmation
+  const handleEndQuiz = () => {
+    if (confirm('Are you sure you want to end the quiz?')) {
+      endQuizFn();
+    }
   };
 
   if (loading) {
@@ -246,12 +262,15 @@ export default function HostSessionPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">{session?.quizzes?.title}</h1>
+          {/* Fix #9: Don't show "Question 0" in lobby */}
           <p className="text-gray-500">
             {phase === 'lobby'
               ? 'Waiting for players'
               : phase === 'finished'
                 ? 'Quiz Complete'
-                : `Question ${currentIndex + 1} of ${questions.length}`}
+                : phase === 'countdown'
+                  ? 'Get ready...'
+                  : `Question ${currentIndex + 1} of ${questions.length}`}
           </p>
         </div>
         <div className="text-right">
@@ -301,10 +320,10 @@ export default function HostSessionPage() {
             <Leaderboard participants={participants} />
           </div>
 
-          {/* End quiz button */}
+          {/* Fix #6: End quiz button with confirmation */}
           <div className="flex justify-center">
             <button
-              onClick={endQuizFn}
+              onClick={handleEndQuiz}
               className="px-6 py-3 bg-kahoot-red text-white rounded-lg font-bold hover:brightness-110 transition-all"
             >
               End Quiz

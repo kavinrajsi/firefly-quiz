@@ -1,27 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export default function Timer({ duration, onComplete, size = 120 }) {
   const [timeLeft, setTimeLeft] = useState(duration);
+  const onCompleteRef = useRef(onComplete);
   const radius = (size - 8) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = (timeLeft / duration) * circumference;
 
+  // Keep callback ref fresh without restarting interval
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  // Reset when duration changes
   useEffect(() => {
     setTimeLeft(duration);
   }, [duration]);
 
+  // Single stable interval — no onComplete or timeLeft in deps
   useEffect(() => {
-    if (timeLeft <= 0) {
-      onComplete?.();
-      return;
-    }
     const timer = setInterval(() => {
-      setTimeLeft((prev) => Math.max(0, prev - 0.1));
+      setTimeLeft((prev) => {
+        const next = Math.max(0, prev - 0.1);
+        if (next <= 0) {
+          clearInterval(timer);
+          // Use setTimeout(0) to avoid calling setState during render
+          setTimeout(() => onCompleteRef.current?.(), 0);
+        }
+        return next;
+      });
     }, 100);
     return () => clearInterval(timer);
-  }, [timeLeft, onComplete]);
+  }, [duration]);
 
   const color = timeLeft > duration * 0.5
     ? '#26890c'

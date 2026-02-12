@@ -21,6 +21,7 @@ export default function AnswerButtons({ options, onAnswer, disabled, selected })
           className={`
             answer-btn ${colors[i]} transition-all duration-300
             ${selected === i ? 'ring-4 ring-white scale-105 brightness-110 shadow-lg' : ''}
+            ${disabled ? 'pointer-events-none' : ''}
             ${selected !== null && selected !== i ? 'opacity-30 scale-90' : ''}
           `}
         >

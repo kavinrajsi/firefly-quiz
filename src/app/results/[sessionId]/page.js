@@ -8,7 +8,7 @@ import Spinner from '@/components/ui/Spinner';
 import LeaderboardDisplay from '@/components/shared/LeaderboardDisplay';
 import { exportToCSV, downloadFile, formatDate } from '@/lib/utils';
 
-const optionColors = ['bg-kahoot-red', 'bg-kahoot-blue', 'bg-kahoot-yellow', 'bg-kahoot-green'];
+const optionColors = ['bg-kahoot-red', 'bg-kahoot-blue', 'bg-kahoot-yellow', 'bg-kahoot-green', 'bg-kahoot-purple'];
 
 export default function ResultsPage() {
   const { sessionId } = useParams();
@@ -78,9 +78,10 @@ export default function ResultsPage() {
       ? (qAnswers.reduce((sum, a) => sum + a.time_taken, 0) / total).toFixed(1)
       : 0;
 
-    const distribution = [0, 0, 0, 0];
+    const optCount = question.options?.length || 4;
+    const distribution = Array(optCount).fill(0);
     qAnswers.forEach((a) => {
-      if (a.selected_option >= 0 && a.selected_option < 4) {
+      if (a.selected_option >= 0 && a.selected_option < optCount) {
         distribution[a.selected_option]++;
       }
     });
@@ -178,7 +179,7 @@ export default function ResultsPage() {
               {isExpanded && (
                 <div className="p-4 border-t bg-gray-50">
                   {/* Answer distribution */}
-                  <div className="grid grid-cols-4 gap-2 mb-4">
+                  <div className={`grid gap-2 mb-4 ${q.options.length > 4 ? 'grid-cols-5' : 'grid-cols-4'}`}>
                     {q.options.map((opt, j) => (
                       <div key={j} className="text-center">
                         <div className={`

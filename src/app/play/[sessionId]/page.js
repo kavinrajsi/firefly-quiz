@@ -19,7 +19,7 @@ export default function PlayerGamePage() {
 
   const [participant, setParticipant] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [phase, setPhase] = useState('waiting'); // waiting, countdown, question, answered, results, finished
+  const [phase, setPhase] = useState('waiting'); // waiting, countdown, question, results, finished
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [questionStartedAt, setQuestionStartedAt] = useState(null);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -29,19 +29,31 @@ export default function PlayerGamePage() {
   const [participants, setParticipants] = useState([]);
   const [connectionError, setConnectionError] = useState(false);
   const selectedAnswerRef = useRef(null);
+  // Fix #4: track the 800ms delay so it can be cancelled
+  const answerDelayRef = useRef(null);
 
-  // Load participant from sessionStorage
+  // Fix #16: Load participant from sessionStorage with validation
   useEffect(() => {
     const stored = sessionStorage.getItem(`participant-${sessionId}`);
     if (!stored) {
       router.push('/play');
       return;
     }
-    setParticipant(JSON.parse(stored));
+    try {
+      const parsed = JSON.parse(stored);
+      if (!parsed?.id || !parsed?.nickname) {
+        router.push('/play');
+        return;
+      }
+      setParticipant(parsed);
+    } catch {
+      router.push('/play');
+      return;
+    }
     setLoading(false);
   }, [sessionId]);
 
-  // Subscribe to game broadcast — stable subscription, no phase/selectedAnswer deps
+  // Subscribe to game broadcast
   useEffect(() => {
     if (!participant) return;
 
@@ -50,34 +62,45 @@ export default function PlayerGamePage() {
         config: { broadcast: { self: false } },
       })
       .on('broadcast', { event: 'game_state' }, ({ payload }) => {
-        switch (payload.type) {
-          case 'countdown':
-            setPhase('countdown');
-            setSelectedAnswer(null);
-            selectedAnswerRef.current = null;
-            setAnswerResult(null);
-            break;
+        // Fix #7: wrap in try-catch so malformed payloads don't break subscription
+        try {
+          // Fix #4: cancel pending answer delay on any broadcast
+          if (answerDelayRef.current) {
+            clearTimeout(answerDelayRef.current);
+            answerDelayRef.current = null;
+          }
 
-          case 'question':
-            setCurrentQuestion(payload.question);
-            setQuestionStartedAt(payload.startedAt);
-            setSelectedAnswer(null);
-            selectedAnswerRef.current = null;
-            setAnswerResult(null);
-            setPhase('question');
-            break;
+          switch (payload.type) {
+            case 'countdown':
+              setPhase('countdown');
+              setSelectedAnswer(null);
+              selectedAnswerRef.current = null;
+              setAnswerResult(null);
+              break;
 
-          case 'show_results':
-            if (selectedAnswerRef.current === null) {
-              setAnswerResult({ isCorrect: false, pointsEarned: 0 });
-            }
-            loadParticipants();
-            setPhase('results');
-            break;
+            case 'question':
+              setCurrentQuestion(payload.question);
+              setQuestionStartedAt(payload.startedAt);
+              setSelectedAnswer(null);
+              selectedAnswerRef.current = null;
+              setAnswerResult(null);
+              setPhase('question');
+              break;
 
-          case 'game_end':
-            loadParticipants().then(() => setPhase('finished'));
-            break;
+            case 'show_results':
+              if (selectedAnswerRef.current === null) {
+                setAnswerResult({ isCorrect: false, pointsEarned: 0 });
+              }
+              loadParticipants();
+              setPhase('results');
+              break;
+
+            case 'game_end':
+              loadParticipants().then(() => setPhase('finished'));
+              break;
+          }
+        } catch (err) {
+          console.error('Error handling broadcast:', err);
         }
       })
       .subscribe((status) => {
@@ -90,13 +113,29 @@ export default function PlayerGamePage() {
     };
   }, [participant, sessionId]);
 
+  // Cleanup answer delay on unmount
+  useEffect(() => {
+    return () => {
+      if (answerDelayRef.current) clearTimeout(answerDelayRef.current);
+    };
+  }, []);
+
+  // Fix #8: loadParticipants with error handling
   const loadParticipants = async () => {
-    const { data } = await supabase
-      .from('participants')
-      .select('*')
-      .eq('session_id', sessionId)
-      .order('score', { ascending: false });
-    setParticipants(data || []);
+    try {
+      const { data, error } = await supabase
+        .from('participants')
+        .select('*')
+        .eq('session_id', sessionId)
+        .order('score', { ascending: false });
+      if (error) {
+        console.error('Failed to load leaderboard:', error);
+        return;
+      }
+      setParticipants(data || []);
+    } catch (err) {
+      console.error('Failed to load leaderboard:', err);
+    }
   };
 
   const handleAnswer = async (optionIndex) => {
@@ -109,8 +148,9 @@ export default function PlayerGamePage() {
     const points = calculateScore(timeTaken, currentQuestion.time_limit, isCorrect);
 
     setAnswerResult({ isCorrect, pointsEarned: points });
-    // Show selected state briefly, then go straight to results
-    setTimeout(() => {
+    // Fix #4: store timeout in ref so it can be cancelled by broadcasts
+    answerDelayRef.current = setTimeout(() => {
+      answerDelayRef.current = null;
       loadParticipants();
       setPhase('results');
     }, 800);
@@ -190,7 +230,7 @@ export default function PlayerGamePage() {
               <Timer
                 duration={currentQuestion.time_limit}
                 onComplete={() => {
-                  if (selectedAnswer === null) {
+                  if (selectedAnswerRef.current === null) {
                     setAnswerResult({ isCorrect: false, pointsEarned: 0 });
                     loadParticipants();
                     setPhase('results');
