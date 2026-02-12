@@ -4,9 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Spinner from '@/components/ui/Spinner';
-import Timer from '@/components/ui/Timer';
 import ParticipantList from '@/components/host/ParticipantList';
-import AnswerDistribution from '@/components/host/AnswerDistribution';
 import HostControls from '@/components/host/HostControls';
 import Leaderboard from '@/components/host/Leaderboard';
 import Countdown from '@/components/shared/Countdown';
@@ -19,14 +17,16 @@ export default function HostSessionPage() {
   const [session, setSession] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [participants, setParticipants] = useState([]);
-  const [answers, setAnswers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [phase, setPhase] = useState('lobby'); // lobby, countdown, question, results, finished
+  const [phase, setPhase] = useState('lobby'); // lobby, countdown, active, finished
   const [currentIndex, setCurrentIndex] = useState(-1);
-  const [questionAnswers, setQuestionAnswers] = useState([]);
-  const [channel, setChannel] = useState(null);
+  const [answerCount, setAnswerCount] = useState(0);
   const [connectionError, setConnectionError] = useState(false);
+  const channelRef = useRef(null);
   const nextQuestionIndexRef = useRef(0);
+  const autoAdvanceRef = useRef(null);
+  const currentIndexRef = useRef(-1);
+  const questionsRef = useRef([]);
 
   // Load session data
   useEffect(() => {
@@ -64,7 +64,6 @@ export default function HostSessionPage() {
   useEffect(() => {
     if (!session) return;
 
-    // Subscribe to new participants
     const partChannel = supabase
       .channel(`participants-${sessionId}`)
       .on(
@@ -82,16 +81,13 @@ export default function HostSessionPage() {
         if (status === 'SUBSCRIBED') setConnectionError(false);
       });
 
-    // Subscribe to answers
     const ansChannel = supabase
       .channel(`answers-${sessionId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'answers', filter: `session_id=eq.${sessionId}` },
         (payload) => {
-          setAnswers((prev) => [...prev, payload.new]);
-          setQuestionAnswers((prev) => [...prev, payload.new]);
-          // Update participant score
+          setAnswerCount((prev) => prev + 1);
           setParticipants((prev) =>
             prev.map((p) =>
               p.id === payload.new.participant_id
@@ -105,14 +101,13 @@ export default function HostSessionPage() {
         if (status === 'CHANNEL_ERROR') setConnectionError(true);
       });
 
-    // Broadcast channel for game state
     const bc = supabase.channel(`game-${sessionId}`, {
       config: { broadcast: { self: false } },
     });
     bc.subscribe((status) => {
       if (status === 'CHANNEL_ERROR') setConnectionError(true);
     });
-    setChannel(bc);
+    channelRef.current = bc;
 
     return () => {
       supabase.removeChannel(partChannel);
@@ -121,11 +116,43 @@ export default function HostSessionPage() {
     };
   }, [session]);
 
+  // Keep refs in sync
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+
+  // Cleanup auto-advance timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
+    };
+  }, []);
+
+  // Skip timer and advance immediately when all players have answered
+  useEffect(() => {
+    if (phase !== 'active' || participants.length === 0) return;
+    if (answerCount >= participants.length) {
+      // Cancel the pending timer
+      if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
+      // Broadcast results to players
+      broadcastState('show_results', { questionIndex: currentIndexRef.current });
+      // Short pause then advance to next question or end
+      autoAdvanceRef.current = setTimeout(() => {
+        const nextIdx = currentIndexRef.current + 1;
+        if (nextIdx < questionsRef.current.length) {
+          nextQuestionIndexRef.current = nextIdx;
+          setPhase('countdown');
+          broadcastState('countdown', { questionIndex: nextIdx });
+        } else {
+          endQuizFn();
+        }
+      }, 3000);
+    }
+  }, [answerCount, participants.length, phase]);
+
   const broadcastState = useCallback(
     (type, data = {}) => {
-      channel?.send({ type: 'broadcast', event: 'game_state', payload: { type, ...data } });
+      channelRef.current?.send({ type: 'broadcast', event: 'game_state', payload: { type, ...data } });
     },
-    [channel]
+    []
   );
 
   const startQuiz = async () => {
@@ -143,8 +170,9 @@ export default function HostSessionPage() {
   const showQuestion = useCallback(
     async (index) => {
       setCurrentIndex(index);
-      setQuestionAnswers([]);
-      setPhase('question');
+      currentIndexRef.current = index;
+      setAnswerCount(0);
+      setPhase('active');
 
       const now = new Date().toISOString();
       await supabase
@@ -157,6 +185,26 @@ export default function HostSessionPage() {
         startedAt: now,
         question: questions[index],
       });
+
+      // Auto-advance: after time_limit, broadcast results then move to next question
+      const timeLimit = questions[index]?.time_limit || 30;
+      autoAdvanceRef.current = setTimeout(() => {
+        // Broadcast results to players
+        broadcastState('show_results', { questionIndex: index });
+
+        // After 5s pause for players to see results, advance to next or end
+        autoAdvanceRef.current = setTimeout(() => {
+          const nextIdx = index + 1;
+          if (nextIdx < questions.length) {
+            nextQuestionIndexRef.current = nextIdx;
+            setPhase('countdown');
+            broadcastState('countdown', { questionIndex: nextIdx });
+          } else {
+            // All questions done — end quiz
+            endQuizFn();
+          }
+        }, 5000);
+      }, timeLimit * 1000);
     },
     [broadcastState, questions, sessionId, supabase]
   );
@@ -165,19 +213,8 @@ export default function HostSessionPage() {
     showQuestion(nextQuestionIndexRef.current);
   }, [showQuestion]);
 
-  const showResults = () => {
-    setPhase('results');
-    broadcastState('show_results', { questionIndex: currentIndex });
-  };
-
-  const nextQuestion = () => {
-    const nextIdx = currentIndex + 1;
-    nextQuestionIndexRef.current = nextIdx;
-    setPhase('countdown');
-    broadcastState('countdown', { questionIndex: nextIdx });
-  };
-
-  const endQuiz = async () => {
+  const endQuizFn = async () => {
+    if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
     setPhase('finished');
     await supabase
       .from('quiz_sessions')
@@ -194,8 +231,6 @@ export default function HostSessionPage() {
     );
   }
 
-  const currentQuestion = questions[currentIndex];
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       {connectionError && (
@@ -203,6 +238,7 @@ export default function HostSessionPage() {
           Connection lost. Live updates may be delayed. Try refreshing the page.
         </div>
       )}
+
       {/* Countdown overlay */}
       {phase === 'countdown' && <Countdown from={3} onComplete={onCountdownComplete} />}
 
@@ -211,7 +247,11 @@ export default function HostSessionPage() {
         <div>
           <h1 className="text-2xl font-bold">{session?.quizzes?.title}</h1>
           <p className="text-gray-500">
-            {phase === 'lobby' ? 'Waiting for players' : `Question ${currentIndex + 1} of ${questions.length}`}
+            {phase === 'lobby'
+              ? 'Waiting for players'
+              : phase === 'finished'
+                ? 'Quiz Complete'
+                : `Question ${currentIndex + 1} of ${questions.length}`}
           </p>
         </div>
         <div className="text-right">
@@ -245,67 +285,30 @@ export default function HostSessionPage() {
         </div>
       )}
 
-      {/* Question phase */}
-      {phase === 'question' && currentQuestion && (
-        <div className="bg-white rounded-xl shadow-sm p-6 space-y-6">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h2 className="text-2xl font-bold mb-2">{currentQuestion.question_text}</h2>
-              {currentQuestion.media_url && (
-                <img src={currentQuestion.media_url} alt="" className="h-48 rounded-lg object-cover mb-4" />
-              )}
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                {currentQuestion.options.map((opt, i) => (
-                  <div
-                    key={i}
-                    className={`answer-btn ${
-                      ['bg-kahoot-red', 'bg-kahoot-blue', 'bg-kahoot-yellow', 'bg-kahoot-green', 'bg-kahoot-purple'][i % 5]
-                    }`}
-                  >
-                    {opt}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="ml-6">
-              <Timer duration={currentQuestion.time_limit} onComplete={showResults} />
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <p className="text-gray-500">
-              {questionAnswers.length} / {participants.length} answered
-            </p>
-            <HostControls
-              status="showing_question"
-              onShowResults={showResults}
-              totalQuestions={questions.length}
-              currentIndex={currentIndex}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Results phase */}
-      {phase === 'results' && currentQuestion && (
+      {/* Active game — only participant count + live leaderboard */}
+      {phase === 'active' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-xl font-bold mb-1">{currentQuestion.question_text}</h2>
-            <p className="text-kahoot-green font-semibold mb-4">
-              Correct: {currentQuestion.options[currentQuestion.correct_option]}
-            </p>
-            <AnswerDistribution question={currentQuestion} answers={questionAnswers} />
+          {/* Participant count */}
+          <div className="bg-white rounded-xl shadow-sm p-6 text-center">
+            <p className="text-gray-500 text-sm mb-1">Players</p>
+            <div className="text-5xl font-extrabold text-kahoot-purple">
+              {participants.length}
+            </div>
           </div>
+
+          {/* Live leaderboard */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             <Leaderboard participants={participants} />
           </div>
+
+          {/* End quiz button */}
           <div className="flex justify-center">
-            <HostControls
-              status="showing_results"
-              currentIndex={currentIndex}
-              totalQuestions={questions.length}
-              onNextQuestion={nextQuestion}
-              onEndQuiz={endQuiz}
-            />
+            <button
+              onClick={endQuizFn}
+              className="px-6 py-3 bg-kahoot-red text-white rounded-lg font-bold hover:brightness-110 transition-all"
+            >
+              End Quiz
+            </button>
           </div>
         </div>
       )}

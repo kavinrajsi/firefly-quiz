@@ -28,6 +28,7 @@ export default function PlayerGamePage() {
   const scoreRef = useRef(0);
   const [participants, setParticipants] = useState([]);
   const [connectionError, setConnectionError] = useState(false);
+  const selectedAnswerRef = useRef(null);
 
   // Load participant from sessionStorage
   useEffect(() => {
@@ -40,7 +41,7 @@ export default function PlayerGamePage() {
     setLoading(false);
   }, [sessionId]);
 
-  // Subscribe to game broadcast
+  // Subscribe to game broadcast — stable subscription, no phase/selectedAnswer deps
   useEffect(() => {
     if (!participant) return;
 
@@ -53,6 +54,7 @@ export default function PlayerGamePage() {
           case 'countdown':
             setPhase('countdown');
             setSelectedAnswer(null);
+            selectedAnswerRef.current = null;
             setAnswerResult(null);
             break;
 
@@ -60,16 +62,15 @@ export default function PlayerGamePage() {
             setCurrentQuestion(payload.question);
             setQuestionStartedAt(payload.startedAt);
             setSelectedAnswer(null);
+            selectedAnswerRef.current = null;
             setAnswerResult(null);
             setPhase('question');
             break;
 
           case 'show_results':
-            if (selectedAnswer === null) {
-              // Player didn't answer in time
+            if (selectedAnswerRef.current === null) {
               setAnswerResult({ isCorrect: false, pointsEarned: 0 });
             }
-            // Load updated participants for leaderboard
             loadParticipants();
             setPhase('results');
             break;
@@ -87,7 +88,7 @@ export default function PlayerGamePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [participant, sessionId, phase, selectedAnswer]);
+  }, [participant, sessionId]);
 
   const loadParticipants = async () => {
     const { data } = await supabase
@@ -102,13 +103,17 @@ export default function PlayerGamePage() {
     if (selectedAnswer !== null || !currentQuestion) return;
 
     setSelectedAnswer(optionIndex);
+    selectedAnswerRef.current = optionIndex;
     const timeTaken = (Date.now() - new Date(questionStartedAt).getTime()) / 1000;
     const isCorrect = optionIndex === currentQuestion.correct_option;
     const points = calculateScore(timeTaken, currentQuestion.time_limit, isCorrect);
 
     setAnswerResult({ isCorrect, pointsEarned: points });
-    // Show selected state briefly before transitioning to result
-    setTimeout(() => setPhase('answered'), 800);
+    // Show selected state briefly, then go straight to results
+    setTimeout(() => {
+      loadParticipants();
+      setPhase('results');
+    }, 800);
 
     if (isCorrect) {
       scoreRef.current += points;
@@ -187,7 +192,8 @@ export default function PlayerGamePage() {
                 onComplete={() => {
                   if (selectedAnswer === null) {
                     setAnswerResult({ isCorrect: false, pointsEarned: 0 });
-                    setPhase('answered');
+                    loadParticipants();
+                    setPhase('results');
                   }
                 }}
                 size={60}
@@ -206,25 +212,19 @@ export default function PlayerGamePage() {
         </div>
       )}
 
-      {/* Answered / Results */}
-      {(phase === 'answered' || phase === 'results') && answerResult && (
+      {/* Results */}
+      {phase === 'results' && answerResult && (
         <div className="space-y-6">
           <PlayerResults
             isCorrect={answerResult.isCorrect}
             pointsEarned={answerResult.pointsEarned}
           />
 
-          {phase === 'results' && participants.length > 0 && (
+          {participants.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-4">
               <h3 className="font-bold mb-3">Leaderboard</h3>
               <LeaderboardDisplay participants={participants} limit={5} />
             </div>
-          )}
-
-          {phase === 'answered' && (
-            <p className="text-center text-gray-400 text-sm">
-              Waiting for other players...
-            </p>
           )}
         </div>
       )}
