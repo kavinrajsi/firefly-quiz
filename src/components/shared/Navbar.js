@@ -42,6 +42,12 @@ export default function Navbar() {
                 >
                   Dashboard
                 </Link>
+                <Link
+                  href="/dashboard/reports"
+                  className="text-gray-600 hover:text-kahoot-purple font-medium transition-colors"
+                >
+                  Reports
+                </Link>
                 <button
                   onClick={handleSignOut}
                   className="text-gray-600 hover:text-red-600 font-medium transition-colors"

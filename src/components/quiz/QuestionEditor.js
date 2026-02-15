@@ -12,7 +12,7 @@ export default function QuestionEditor({ question, onSave, onCancel }) {
   const [text, setText] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctOption, setCorrectOption] = useState(0);
-  const [timeLimit, setTimeLimit] = useState(30);
+  const [timeLimit, setTimeLimit] = useState(20);
   const [mediaUrl, setMediaUrl] = useState('');
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function QuestionEditor({ question, onSave, onCancel }) {
       setText(question.question_text || '');
       setOptions(question.options || ['', '', '', '']);
       setCorrectOption(question.correct_option ?? 0);
-      setTimeLimit(question.time_limit || 30);
+      setTimeLimit(question.time_limit || 20);
       setMediaUrl(question.media_url || '');
     }
   }, [question]);
@@ -85,7 +85,7 @@ export default function QuestionEditor({ question, onSave, onCancel }) {
             onChange={(e) => setTimeLimit(Number(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-kahoot-purple"
           >
-            {[10, 15, 20, 30, 45, 60].map((t) => (
+            {[20, 30, 45, 60].map((t) => (
               <option key={t} value={t}>{t} seconds</option>
             ))}
           </select>

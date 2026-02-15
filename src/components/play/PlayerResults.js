@@ -1,6 +1,19 @@
 'use client';
 
+import { useEffect } from 'react';
+import confetti from 'canvas-confetti';
+
 export default function PlayerResults({ isCorrect, pointsEarned }) {
+  useEffect(() => {
+    if (isCorrect) {
+      confetti({
+        particleCount: 150,
+        spread: 80,
+        origin: { y: 0.6 },
+      });
+    }
+  }, [isCorrect]);
+
   return (
     <div className={`
       flex flex-col items-center justify-center py-12 rounded-xl

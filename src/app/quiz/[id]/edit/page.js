@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Button from '@/components/ui/Button';
@@ -23,10 +23,17 @@ export default function EditQuizPage() {
   const [editingIndex, setEditingIndex] = useState(null); // null = none, -1 = new
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const editorRef = useRef(null);
 
   useEffect(() => {
     loadQuiz();
   }, [id]);
+
+  useEffect(() => {
+    if (editingIndex !== null) {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [editingIndex]);
 
   const loadQuiz = async () => {
     setLoading(true);
@@ -188,6 +195,7 @@ export default function EditQuizPage() {
             />
           </div>
           <Button variant="secondary" onClick={() => router.push('/dashboard')}>
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             Back
           </Button>
         </div>
@@ -202,6 +210,7 @@ export default function EditQuizPage() {
             variant="secondary"
             onClick={() => setShowBulkImport(true)}
           >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
             Bulk Import
           </Button>
           <Button
@@ -226,7 +235,7 @@ export default function EditQuizPage() {
       )}
 
       {editingIndex !== null && (
-        <div className="mb-4">
+        <div className="mb-4" ref={editorRef}>
           <QuestionEditor
             question={editingQuestion}
             onSave={handleSaveQuestion}

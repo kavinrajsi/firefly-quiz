@@ -19,7 +19,7 @@ export default function PlayerGamePage() {
 
   const [participant, setParticipant] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [phase, setPhase] = useState('waiting'); // waiting, countdown, question, results, finished
+  const [phase, setPhase] = useState('waiting'); // waiting, countdown, countdown-done, question, results, finished
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [questionStartedAt, setQuestionStartedAt] = useState(null);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -189,7 +189,7 @@ export default function PlayerGamePage() {
   };
 
   const onCountdownComplete = useCallback(() => {
-    // Question will arrive via broadcast
+    setPhase('countdown-done');
   }, []);
 
   if (loading) {
@@ -215,6 +215,13 @@ export default function PlayerGamePage() {
 
       {/* Countdown overlay */}
       {phase === 'countdown' && <Countdown from={3} onComplete={onCountdownComplete} />}
+
+      {/* Brief gap after countdown ends but before question broadcast arrives */}
+      {phase === 'countdown-done' && (
+        <div className="flex items-center justify-center py-20">
+          <Spinner size="lg" />
+        </div>
+      )}
 
       {/* Waiting */}
       {phase === 'waiting' && (

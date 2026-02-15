@@ -104,6 +104,16 @@ export default function DashboardPage() {
     setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
   };
 
+  const deleteSession = async (sessionId) => {
+    if (!confirm('Delete this session and all its data (answers, participants)?')) return;
+    const { error } = await supabase.from('quiz_sessions').delete().eq('id', sessionId);
+    if (error) {
+      setError('Failed to delete session.');
+      return;
+    }
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+  };
+
   const startSession = async (quizId) => {
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -149,13 +159,19 @@ export default function DashboardPage() {
 
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">My Quizzes</h1>
-        <Button onClick={() => setShowNewQuiz(true)}>+ New Quiz</Button>
+        <Button onClick={() => setShowNewQuiz(true)}>
+          <svg className="w-5 h-5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          New Quiz
+        </Button>
       </div>
 
       {quizzes.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl shadow-sm">
           <p className="text-gray-500 text-lg mb-4">No quizzes yet</p>
-          <Button onClick={() => setShowNewQuiz(true)}>Create your first quiz</Button>
+          <Button onClick={() => setShowNewQuiz(true)}>
+            <svg className="w-5 h-5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Create your first quiz
+          </Button>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -174,15 +190,19 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button size="sm" onClick={() => startSession(quiz.id)}>
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728M9.172 15.828a4 4 0 010-5.656m5.656 0a4 4 0 010 5.656M12 12h.01" /></svg>
                     Host Live
                   </Button>
                   <Button size="sm" variant="secondary" onClick={() => router.push(`/quiz/${quiz.id}/edit`)}>
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     Edit
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => duplicateQuiz(quiz)}>
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                     Duplicate
                   </Button>
                   <Button size="sm" variant="danger" onClick={() => deleteQuiz(quiz.id)}>
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     Delete
                   </Button>
                 </div>
@@ -208,9 +228,16 @@ export default function DashboardPage() {
                     <span>{formatDate(session.created_at)}</span>
                   </div>
                 </div>
-                <Button size="sm" variant="secondary" onClick={() => router.push(`/results/${session.id}`)}>
-                  Results
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => router.push(`/results/${session.id}`)}>
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                    Results
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => deleteSession(session.id)}>
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    Delete
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
@@ -234,8 +261,14 @@ export default function DashboardPage() {
             placeholder="Brief description..."
           />
           <div className="flex gap-3 justify-end">
-            <Button variant="secondary" onClick={() => setShowNewQuiz(false)}>Cancel</Button>
-            <Button onClick={createQuiz}>Create Quiz</Button>
+            <Button variant="secondary" onClick={() => setShowNewQuiz(false)}>
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              Cancel
+            </Button>
+            <Button onClick={createQuiz}>
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              Create Quiz
+            </Button>
           </div>
         </div>
       </Modal>
