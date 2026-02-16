@@ -9,6 +9,9 @@ export const dynamic = 'force-dynamic';
 export const metadata = {
   title: 'Firefly - Interactive Quiz Platform',
   description: 'Create and host interactive quizzes for corporate training',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({ children }) {
