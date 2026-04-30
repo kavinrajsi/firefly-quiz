@@ -4,11 +4,11 @@ import { useState } from 'react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 
-// Employee number format: exactly 6 digits.
+// Employee number format: exactly 4 digits.
 function validateEmployeeNumber(value) {
   const trimmed = value.trim();
   if (!trimmed) return 'Employee number is required';
-  if (!/^\d{6}$/.test(trimmed)) return 'Employee number must be exactly 6 digits';
+  if (!/^\d{4}$/.test(trimmed)) return 'Employee number must be exactly 4 digits';
   return null;
 }
 
@@ -47,10 +47,10 @@ export default function JoinForm({ onJoin, loading }) {
         label="Employee Number"
         value={employeeNumber}
         onChange={(e) => setEmployeeNumber(e.target.value.replace(/\D/g, ''))}
-        placeholder="6-digit employee number"
-        maxLength={6}
+        placeholder="4-digit employee number"
+        maxLength={4}
         inputMode="numeric"
-        pattern="\d{6}"
+        pattern="\d{4}"
       />
       {error && (
         <p className="text-sm text-red-500">{error}</p>
