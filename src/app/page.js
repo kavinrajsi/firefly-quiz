@@ -140,7 +140,7 @@ export default function Home() {
               </div>
               <h3 className="font-bold text-lg mb-2">Host</h3>
               <p className="text-gray-600 text-sm">
-                Start a live session and share the room code. Players join from any device with just a nickname.
+                Start a live session and share the room code. Players join from any device with their employee number.
               </p>
             </div>
             <div className="text-center">

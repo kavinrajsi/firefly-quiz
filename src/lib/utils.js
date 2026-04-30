@@ -14,7 +14,7 @@ export function generateRoomCode() {
  * Export participant answers to CSV format.
  */
 export function exportToCSV(participants, answers, questions) {
-  const headers = ['Rank', 'Nickname', 'Total Score'];
+  const headers = ['Rank', 'Employee Number', 'Total Score'];
   questions.forEach((q, i) => {
     headers.push(`Q${i + 1} Answer`, `Q${i + 1} Correct`, `Q${i + 1} Points`, `Q${i + 1} Time (s)`);
   });

@@ -11,7 +11,7 @@ export default function JoinPage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const handleJoin = async (roomCode, nickname) => {
+  const handleJoin = async (roomCode, employeeNumber) => {
     setLoading(true);
     setError('');
 
@@ -35,11 +35,11 @@ export default function JoinPage() {
         return;
       }
 
-      // Add participant (enforce max 20 chars)
-      const safeName = nickname.slice(0, 20);
+      // Add participant. The `nickname` column stores the employee number.
+      const safeValue = employeeNumber.slice(0, 20);
       const { data: participant, error: joinError } = await supabase
         .from('participants')
-        .insert({ session_id: session.id, nickname: safeName })
+        .insert({ session_id: session.id, nickname: safeValue })
         .select()
         .single();
 
@@ -49,10 +49,9 @@ export default function JoinPage() {
         return;
       }
 
-      // Store participant info in sessionStorage for the game page
       sessionStorage.setItem(
         `participant-${session.id}`,
-        JSON.stringify({ id: participant.id, nickname, roomCode })
+        JSON.stringify({ id: participant.id, nickname: employeeNumber, roomCode })
       );
 
       router.push(`/play/${session.id}`);
